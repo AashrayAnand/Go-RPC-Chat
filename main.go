@@ -28,11 +28,13 @@ func main() {
 			srv.Serve() // register RPC structs/methods and listen to local:8080
 			defer srv.Terminate()
 		} else {
-			cli := new(client.Client) // create client structureßß ß
-			cli.Connect()
-			//cli.Message(&core.Msg{Name: "A", Message: "Hello", Time: t_(k_)})
-			cli.Handle()
+			cli := new(client.Client) // create client structure
+			cli.Create() // initialize client structure
+			//cli.Handle()
 			defer cli.Terminate() // close connection on termination
 		}
 	}
+
+	m := core.Msg{Sender: "Aashray", Receiver: "", Message: "Hello", Time: t_(k_)}
+	fmt.Println(m)
 }

@@ -19,10 +19,8 @@ type Client struct {
 }
 
 const (
-  ECHO = "Server.Echo" //
-  CHECKMSG = "Server.GetMessages"
+  GETMSG = "Server.GetMessages"
   SEND = "Server.Send"
-  DM = "Server.Direct" //
   local = "127.0.0.1:8080" // local host connection string
 )
 
@@ -44,7 +42,7 @@ func (client *Client) Terminate() {
   }
 }
 
-func (client *Client) Connect() {
+func (client *Client) Create() {
   if client.Conn == nil {
     var err error
     client.Conn, err = rpc.DialHTTP("tcp", local) // local host HTTP RPC server connection
@@ -63,9 +61,10 @@ func (client *Client) HandleMessages(ch chan int) {
 // main loop for client, dispatch goroutines to check for and handle messages
 func (client *Client) Handle() {
   go func() {
-    for { // permanently check for messages
-      var args *core.GetMessagesArgs{User: client.Name, client.Index}
-      err := client.Conn.Call(CHECKMSG, args, &response)
+    for {
+      args := &core.GetMessagesArgs{User: client.Name, Index: client.Index}
+      response := &core.MsgListResp{} // response (list of messages)
+      err := client.Conn.Call(GETMSG, args, response)
       if err != nil {
         log.Fatal("error checking for messages", err)
       }

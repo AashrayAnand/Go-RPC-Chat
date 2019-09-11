@@ -10,8 +10,8 @@ import (
 
 type Server struct {
   Users []string // users in the chat room
-  UserMessages map[string][]string // for each user, maintain a queue of messages
-  listener net.Listener
+  Messages []core.Msg // list of message
+  listener net.Listener // HTTP listener
 }
 
 // exported Server methods should be able to
@@ -20,7 +20,22 @@ type Server struct {
 // 3. broadcast a message to a specific user
 // 4. terminate the chat
 
-func (server *Server) GetMessages(request *core.GetMessagesArgs, response *core.MsgListResp) error {
+func (server *Server) NewUser(request *core.NewUserArgs, response *int) error {
+  if server.Users == nil {
+    server.Users = make([]string, 1) // create slice to store users
+  }
+  // utility function checks if user name already exists
+  if core.CheckSlice(len(server.Users,
+    func (i int) bool { return server.Users[i] == request.Name})) != -1 {
+    *response = -1
+  } else {
+    server.Users = append(server.Users, request.Name) // add user to list of users
+    *response = 0
+  }
+  return nil // no errors (duplicate name just returns appropriate response)
+}
+
+/*func (server *Server) GetMessages(request *core.GetMessagesArgs, response *core.GetMessagesResp) error {
   // check message queue exists for user,
   // check length of message queue is > curr index of client
   // return slice of message queue from curr index of client onwards
@@ -35,14 +50,7 @@ func (server *Server) GetMessages(request *core.GetMessagesArgs, response *core.
     return nil
   }
   return error.New("User %s does not exist!", request.User)
-}
-
-// server echoes message
-func (server *Server) Echo(request *core.Msg, response *core.MsgResp) error {
-  // create response message for message
-  response.Message = fmt.Sprintf("[%s @ %s]: %s", request.Name, request.Time, request.Message)
-  return nil
-}
+}*/
 
 func (server *Server) Terminate() {
   if server.listener != nil {
@@ -55,14 +63,12 @@ func (server *Server) Serve() {
   rpc.Register(server) // register server methods which satisfy RPC constraints
   rpc.HandleHTTP() // indicate that RPC server receives HTTP requests
 
-  listener, err := net.Listen("tcp", ":8080") // return net listener on port 8080
+  var err error
+  server.listener, err = net.Listen("tcp", ":8080") // return net listener on port 8080
 
   if err != nil { // error checking
     log.Fatal("server listen error:", err)
   }
-
-  server.listener = listener // bind net listener to server struct
-
 
   http.Serve(server.listener, nil) // listen on net listener, and dispatch
                                    // go routines to service requests
