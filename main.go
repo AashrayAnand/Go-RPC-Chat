@@ -5,7 +5,6 @@ import (
 	"flag" // used to get command line arguments
 	"log"
 	"time"
-	"./core"
 	"./client"
 	"./server"
 )
@@ -30,11 +29,7 @@ func main() {
 		} else {
 			cli := new(client.Client) // create client structure
 			cli.Create() // initialize client structure
-			//cli.Handle()
-			defer cli.Terminate() // close connection on termination
+			cli.Handle() // register user and handle sending/receiving messages
 		}
 	}
-
-	m := core.Msg{Sender: "Aashray", Receiver: "", Message: "Hello", Time: t_(k_)}
-	fmt.Println(m)
 }

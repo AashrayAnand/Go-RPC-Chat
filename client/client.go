@@ -1,11 +1,13 @@
 package client
 
 import (
-  "../core"
+  "../shared"
   "net/rpc"
   "time"
   "log"
   "fmt"
+  "bufio"
+  "os"
 )
 
 // given format parameter, returns stringified time
@@ -14,27 +16,18 @@ var k_ = time.Kitchen
 
 type Client struct {
         Name string // screen name
-        Index int // client's current positon in message queue
         Conn *rpc.Client // result of calling rpc.Dial
 }
 
 const (
-  GETMSG = "Server.GetMessages"
-  SEND = "Server.Send"
+  NEWUSER = "Server.NewUser" // RPC string for registering user
+  GETMSG = "Server.GetMessages" // RPC string for getting messages
+  SEND = "Server.Send" // RPC string for sending message
+  EXIT = "/exit" // message user must send to exit chat
+  HELP = "/help" // help function, user can send this to list chat commands
+  WHITESPACE = ""
   local = "127.0.0.1:8080" // local host connection string
 )
-
-// use RPC to send message
-func (client *Client) Message(message *core.Msg) {
-  var response core.MsgResp
-
-  err := client.Conn.Call(ECHO, message, &response) // uses RPC to call Handler.Send with given args
-  if err != nil {
-    log.Fatal("error on Message(...):", err)
-  }
-
-  fmt.Printf("%s\n", response.Message)
-}
 
 func (client *Client) Terminate() {
   if client.Conn != nil {
@@ -45,37 +38,117 @@ func (client *Client) Terminate() {
 func (client *Client) Create() {
   if client.Conn == nil {
     var err error
-    client.Conn, err = rpc.DialHTTP("tcp", local) // local host HTTP RPC server connection
+    client.Conn, err = rpc.Dial("tcp", local) // register RPC client
     if err != nil {
       log.Fatal("client error on Dial")
     }
   }
 }
 
-func (client *Client) HandleMessages(ch chan int) {
-  // TODO: loops infinitely, handling receiving and sending messages
-  // by client
-  ch <- 1
+// client-side method, executes RPC call to get unseen messsages, matches
+// name of remote function for transparency
+func (client *Client) GetMessages() {
+  for {
+    args := &shared.GetMessagesArgs{User: client.Name}
+    resp := &shared.GetMessagesResp{}
+    err := client.Conn.Call(GETMSG, args, resp)
+    if err != nil {
+      log.Fatal(err)
+    }
+
+    // display unseen messages
+    for _, message := range resp.Messages {
+      fmt.Println(message)
+    }
+  }
 }
+
+func (client *Client) SendMessage(message *shared.Msg) {
+  args := &shared.SendMessageArgs{Message: message}
+  resp := &shared.SendMessageResp{}
+  err := client.Conn.Call(SEND, args, resp)
+  // error check for robustness, server does not return
+  // non-nil error for any case, but can leave this here
+  // in case server send RPC stub is updated
+  if err != nil {
+    log.Fatal(err)
+  }
+  // attempted to DM user not currently in chat room
+  if resp.Code == -1 {
+    fmt.Printf("the user %s does not exist", message.Receiver)
+  }
+}
+
+// listener for client
 
 // main loop for client, dispatch goroutines to check for and handle messages
 func (client *Client) Handle() {
-  go func() {
-    for {
-      args := &core.GetMessagesArgs{User: client.Name, Index: client.Index}
-      response := &core.MsgListResp{} // response (list of messages)
-      err := client.Conn.Call(GETMSG, args, response)
-      if err != nil {
-        log.Fatal("error checking for messages", err)
-      }
-      for _ , msg := range response.Messages {
-        fmt.Println(msg)
-      }
-    }
-  }()
+  client.register() // register user in chat room
 
-  ch := make(chan int)
-  go client.HandleMessages(ch)
-  <- ch // blocks on receiving a value from channel, only on
-        // termination of HandleMessages
+  go client.GetMessages()
+  // use channel to block Handle() after dispatching go routines to get
+  // messages and listen to user input (value will be sent to DoneChan
+  // when client.listen terminates)
+  DoneChan := make(chan int)
+  go client.listen(DoneChan)
+  <- DoneChan
+
+  // at this point, client should be terminated
+  client.Terminate()
+}
+
+// asks for screen name continuously, until error, or name is registered (unique name)
+func (client *Client) register() {
+  reader := bufio.NewReader(os.Stdin) // read from stdin
+  for {
+    fmt.Print("Enter a screen name: ")
+    name, _ := reader.ReadString('\n')
+    nameNoLine := name[:len(name) - 1]
+    fmt.Printf("attempting to register user: %s", name)
+    args := &shared.NewUserArgs{Name: nameNoLine}
+    resp := &shared.NewUserResp{}
+    // RPC call to register new user
+    err := client.Conn.Call(NEWUSER, args, resp)
+    // err is only non-nil if chat room is full, should exit
+    if err != nil {
+      log.Fatal(err)
+    }
+    // name is taken, failed to register user
+    if resp.Code == -1 {
+      fmt.Printf("Failed to register, name %s is taken", name[:len(name) - 1])
+      continue
+    // successfully registered user
+    } else {
+      fmt.Printf("Successfully registered user, welcome %s", name)
+      client.Name = nameNoLine
+      break
+    }
+  }
+}
+
+func (client *Client) listen(DoneChan chan int) {
+  reader := bufio.NewReader(os.Stdin)
+  for {
+    // wait for message
+    message, _ := reader.ReadString('\n')
+    // remove newline from message
+    messageNoLine := message[:len(message) - 1]
+    switch messageNoLine {
+    case WHITESPACE:
+      continue
+    // list commands supported by the chat
+    case HELP:
+      fmt.Println("CHAT COMMANDS")
+      fmt.Println("exit the chat -> /exit")
+      fmt.Println("send a DM to recipient -> @recipient <message>")
+    // send
+    case EXIT:
+      DoneChan <- 1
+      break
+    default:
+      // send basic message to group
+      MessageStruct :=  &shared.Msg{Sender: client.Name, Receiver: "", Message: messageNoLine, Time: t_(k_)}
+      client.SendMessage(MessageStruct)
+    }
+  }
 }

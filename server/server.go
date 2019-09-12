@@ -1,18 +1,31 @@
 package server
 import (
   "net/rpc"
-  "../core"
+  "../shared"
   "net"
-  "net/http"
+  "strconv"
+//  "net/http"
   "log"
   "fmt"
+  "errors"
+  "sync"
 )
 
-type Server struct {
-  Users []string // users in the chat room
-  Messages []core.Msg // list of message
-  listener net.Listener // HTTP listener
+// wrapped for message list dictionary, allows for atomicity
+// when reading/writing messsages
+type LockedMessages struct {
+  Map map[string][]*shared.Msg
+  sync.Mutex
 }
+
+type Server struct {
+  Port int // port to connect to
+  Users []string // users in the chat room
+  Messages LockedMessages // map of each user to their message list
+  listener net.Listener // listener for RPC calls
+}
+
+const MAX_USERS = 100 // at most 100 people in the chat room
 
 // exported Server methods should be able to
 // 1. register a new user
@@ -20,37 +33,70 @@ type Server struct {
 // 3. broadcast a message to a specific user
 // 4. terminate the chat
 
-func (server *Server) NewUser(request *core.NewUserArgs, response *int) error {
-  if server.Users == nil {
-    server.Users = make([]string, 1) // create slice to store users
+// utility method, calls generic shared slice indexing function, for
+// this method, simply returns index of a name in server's user list
+// or -1 if user does not exist
+func (server *Server) checkName(name string) int {
+  // function passed to CheckSplice to check if name is duplicate
+  predicate := func (i int) bool {
+    return server.Users[i] == name
   }
-  // utility function checks if user name already exists
-  if core.CheckSlice(len(server.Users,
-    func (i int) bool { return server.Users[i] == request.Name})) != -1 {
-    *response = -1
-  } else {
-    server.Users = append(server.Users, request.Name) // add user to list of users
-    *response = 0
-  }
-  return nil // no errors (duplicate name just returns appropriate response)
+
+  return shared.CheckSlice(len(server.Users), predicate)
 }
 
-/*func (server *Server) GetMessages(request *core.GetMessagesArgs, response *core.GetMessagesResp) error {
-  // check message queue exists for user,
-  // check length of message queue is > curr index of client
-  // return slice of message queue from curr index of client onwards
-  if messages, ok := server.UserMessages[request.User]; ok {
-    // store messages since last check, update current index
-    response.Messages = messages[request.Index:]
-    if len(messages) == 0 {
-      response.Index = 0
-    } else {
-      response.Index = len(messages) - 1
-    }
-    return nil
+// exported method, will be executed through RPC by clients attempting to join chat room
+func (server *Server) NewUser(request *shared.NewUserArgs, response *shared.NewUserResp) error {
+  if len(server.Users) == MAX_USERS {
+    return errors.New("Chat room is full. Try again later.")
   }
-  return error.New("User %s does not exist!", request.User)
-}*/
+
+  if server.checkName(request.Name) != -1 {
+    fmt.Println("blocked attempt to register user with an existing name", request.Name)
+    response.Code = -1
+  } else {
+    server.Users = append(server.Users, request.Name) // add user to list of users
+    fmt.Println("registered new user", request.Name)
+    response.Code = 0
+  }
+  return nil
+}
+
+// exported method, will be executed through RPC by clients attempting to get messages
+func (server *Server) GetMessages(request *shared.GetMessagesArgs, response *shared.GetMessagesResp) error {
+  // lock message list until we have copied messages
+  server.Messages.Lock()
+  response.Messages = server.Messages.Map[request.User]
+  server.Messages.Map[request.User] = nil
+  server.Messages.Unlock()
+  return nil
+}
+
+// exported method, will be executed through RPC by clients attempting to send a message
+func (server *Server) Send(request *shared.SendMessageArgs, response *shared.SendMessageResp) error {
+  // message is a group message, send to all message lists
+  fmt.Println("received message", request.Message)
+  server.Messages.Lock()
+  if request.Message.Receiver == "" {
+    for user, _ := range server.Messages.Map {
+      server.Messages.Map[user] = append(server.Messages.Map[user], request.Message)
+    }
+    response.Code = 0
+  // direct message, check if user exists, if so, send to user's message list
+  } else {
+    receiver := request.Message.Receiver
+    // user exists, add to their message list
+    if server.checkName(receiver) != -1 {
+      server.Messages.Map[receiver] = append(server.Messages.Map[receiver], request.Message)
+      response.Code = 0
+    } else {
+      fmt.Println("attempted to send message to non-existent user", receiver)
+      response.Code = -1
+    }
+  }
+  server.Messages.Unlock()
+  return nil
+}
 
 func (server *Server) Terminate() {
   if server.listener != nil {
@@ -58,18 +104,24 @@ func (server *Server) Terminate() {
   }
 }
 
+func (server *Server) initialize() {
+  server.Port = 8080
+  server.Users = make([]string, 1, MAX_USERS) // initialize to hold up to max users
+  server.Messages.Map = make(map[string][]*shared.Msg, 1) // will be resized with append
+}
+
 // create a chat server
 func (server *Server) Serve() {
+  server.initialize() // initialize server structure fields
   rpc.Register(server) // register server methods which satisfy RPC constraints
-  rpc.HandleHTTP() // indicate that RPC server receives HTTP requests
+  //rpc.HandleHTTP() // indicate that RPC server receives HTTP requests
 
   var err error
-  server.listener, err = net.Listen("tcp", ":8080") // return net listener on port 8080
+  server.listener, err = net.Listen("tcp", ":"+strconv.Itoa(server.Port)) // return net listener on port 8080
 
   if err != nil { // error checking
     log.Fatal("server listen error:", err)
   }
 
-  http.Serve(server.listener, nil) // listen on net listener, and dispatch
-                                   // go routines to service requests
+  rpc.Accept(server.listener)
 }
