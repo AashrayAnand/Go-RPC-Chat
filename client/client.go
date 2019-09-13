@@ -35,8 +35,8 @@ const (
 
 func (client *Client) Terminate() {
   if client.Conn != nil {
-    var args shared.RemoveUserArgs{Name: client.Name}
-    var resp shared.RemoveUserResp{}
+    args := &shared.RemoveUserArgs{Name: client.Name}
+    resp := &shared.RemoveUserResp{}
     err := client.Conn.Call(GETMSG, args, resp)
     if err != nil {
       log.Fatal("error removing user")
