@@ -34,6 +34,17 @@ type NewUserResp struct {
       Code int
 }
 
+// args struct for REQUESTING new user
+type RemoveUserArgs struct {
+      Name string // name of new user
+}
+
+// response struct for RECEIVING result of requesting
+// new user (integer wrapper, for clarity only)
+type RemoveUserResp struct {
+      Code int
+}
+
 // RPC #2: SEND MESSAGE
 
 // args struct for requesting message be sent

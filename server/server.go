@@ -61,6 +61,29 @@ func (server *Server) NewUser(request *shared.NewUserArgs, response *shared.NewU
   return nil
 }
 
+func (server *Server) remove(name string){
+  for i := 0; i < len(server.Users); i++ {
+    if server.Users[i] == name {
+      if i < len(server.Users) - 1 {
+        server.Users = append(server.Users[0:i], server.Users[i+1:]...)
+      } else {
+        server.Users = server.Users[:i]
+      }
+    }
+  }
+}
+
+func (server *Server) RemoveUser(request *shared.RemoveUserArgs, response *shared.RemoveUserResp) error {
+  if server.checkName(request.Name) != -1 {
+    server.remove(request.Name)
+    response.Code = 0
+    return nil
+  } else {
+    response.Code = -1
+    return errors.New("attempted to remove non-existent user")
+  }
+}
+
 // exported method, will be executed through RPC by clients attempting to get messages
 func (server *Server) GetMessages(request *shared.GetMessagesArgs, response *shared.GetMessagesResp) error {
   // lock message list until we have copied messages

@@ -50,7 +50,11 @@ func (client *Client) Create() {
 
 // client-side method, executes RPC call to get unseen messsages, matches
 // name of remote function for transparency
-func (client *Client) GetMessages() {
+func (client *Client) GetMessages(DoneChan chan int) {
+  go func () {
+    <- DoneChan
+    return
+  }()
   for {
     args := &shared.GetMessagesArgs{User: client.Name}
     resp := &shared.GetMessagesResp{}
@@ -86,21 +90,20 @@ func (client *Client) SendMessage(message *shared.Msg) {
 
 // main loop for client, dispatch goroutines to check for and handle messages
 func (client *Client) Handle() {
+  // use channel to block Handle() after dispatching go routines to get
+  // messages and listen to user input (value will be sent to DoneChan
+  // when client.listen terminates)
+  DoneChan := make(chan int)
+  // terminate when Handle() exits
+  defer client.Terminate()
   var wg sync.WaitGroup
   wg.Add(1)
   go client.register(&wg) // register user in chat room
   wg.Wait()
 
-  client.GetMessages()
-  // use channel to block Handle() after dispatching go routines to get
-  // messages and listen to user input (value will be sent to DoneChan
-  // when client.listen terminates)
-  /*DoneChan := make(chan int)
-  go client.listen(DoneChan)
-  <- DoneChan*/
-
-  // at this point, client should be terminated
-  client.Terminate()
+  go client.GetMessages(DoneChan) // get user's messages
+  go client.listen(DoneChan) // listen for user input
+  <- DoneChan
 }
 
 // asks for screen name continuously, until error, or name is registered (unique name)
@@ -125,7 +128,7 @@ func (client *Client) register(wg *sync.WaitGroup) {
     }
     // name is taken, failed to register user
     if resp.Code == -1 {
-      fmt.Printf("Failed to register, name %s is taken", name[:len(name) - 1])
+      fmt.Printf("Failed to register, name %s is taken\n", name[:len(name) - 1])
       continue
     // successfully registered user
     } else {
