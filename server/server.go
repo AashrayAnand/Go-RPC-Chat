@@ -69,6 +69,7 @@ func (server *Server) GetMessages(request *shared.GetMessagesArgs, response *sha
   for k, _ := range server.Messages.Map {
     fmt.Println(k)
   }
+  fmt.Println("done printing map")
   if messages, ok := server.Messages.Map[request.User]; ok {
     response.Messages = messages
   } else {
