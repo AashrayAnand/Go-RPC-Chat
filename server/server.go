@@ -4,7 +4,6 @@ import (
   "../shared"
   "net"
   "strconv"
-//  "net/http"
   "log"
   "fmt"
   "errors"
@@ -109,7 +108,7 @@ func (server *Server) Terminate() {
 }
 
 func (server *Server) initialize() {
-  server.Port = 8080
+  server.Port = 3000
   server.Users = make([]string, 1, MAX_USERS) // initialize to hold up to max users
   server.Messages.Map = make(map[string][]*shared.Msg, 1) // will be resized with append
 }
