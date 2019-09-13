@@ -66,14 +66,10 @@ func (server *Server) GetMessages(request *shared.GetMessagesArgs, response *sha
   // lock message list until we have copied messages
   server.Messages.Lock()
   defer server.Messages.Unlock()
-  for k, _ := range server.Messages.Map {
-    fmt.Println(k)
-  }
-  fmt.Println("done printing map")
-  if messages, ok := server.Messages.Map[request.User]; ok {
-    response.Messages = messages
-  } else {
+  if messages, ok := server.Messages.Map[request.User]; !ok && server.checkName(request.Name) == -1 {
     return errors.New("user does not exist")
+  } else {
+    response.Messages = messages
   }
   server.Messages.Map[request.User] = nil
   return nil
