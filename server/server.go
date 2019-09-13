@@ -66,7 +66,7 @@ func (server *Server) GetMessages(request *shared.GetMessagesArgs, response *sha
   // lock message list until we have copied messages
   server.Messages.Lock()
   defer server.Messages.Unlock()
-  if messages, ok := server.Messages.Map[request.User]; !ok && server.checkName(request.Name) == -1 {
+  if messages, ok := server.Messages.Map[request.User]; !ok && server.checkName(request.User) == -1 {
     return errors.New("user does not exist")
   } else {
     response.Messages = messages
