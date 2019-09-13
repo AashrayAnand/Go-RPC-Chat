@@ -66,7 +66,7 @@ func (server *Server) GetMessages(request *shared.GetMessagesArgs, response *sha
   // lock message list until we have copied messages
   server.Messages.Lock()
   defer server.Messages.Unlock()
-  for k, _ := server.Messages.Map {
+  for k, _ := range server.Messages.Map {
     fmt.Println(k)
   }
   if messages, ok := server.Messages.Map[request.User]; ok {
