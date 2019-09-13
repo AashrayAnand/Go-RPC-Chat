@@ -23,6 +23,7 @@ type Client struct {
 
 const (
   NEWUSER = "Server.NewUser" // RPC string for registering user
+  RM = "Server.RemoveUser" // RPC string for removing user
   GETMSG = "Server.GetMessages" // RPC string for getting messages
   SEND = "Server.Send" // RPC string for sending message
   EXIT = "/exit" // message user must send to exit chat
@@ -34,6 +35,12 @@ const (
 
 func (client *Client) Terminate() {
   if client.Conn != nil {
+    var args shared.RemoveUserArgs{Name: client.Name}
+    var resp shared.RemoveUserResp{}
+    err := client.Conn.Call(GETMSG, args, resp)
+    if err != nil {
+      log.Fatal("error removing user")
+    }
     client.Conn.Close()
   }
 }
