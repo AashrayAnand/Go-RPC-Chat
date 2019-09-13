@@ -66,9 +66,13 @@ func (server *Server) NewUser(request *shared.NewUserArgs, response *shared.NewU
 func (server *Server) GetMessages(request *shared.GetMessagesArgs, response *shared.GetMessagesResp) error {
   // lock message list until we have copied messages
   server.Messages.Lock()
-  response.Messages = server.Messages.Map[request.User]
+  defer server.Messages.Unlock()
+  if messages, ok := server.Messages.Map[request.User]; ok {
+    response.Messages = messages
+  } else {
+    return errors.New("user does not exist")
+  }
   server.Messages.Map[request.User] = nil
-  server.Messages.Unlock()
   return nil
 }
 
@@ -114,7 +118,6 @@ func (server *Server) initialize() {
 func (server *Server) Serve() {
   server.initialize() // initialize server structure fields
   rpc.Register(server) // register server methods which satisfy RPC constraints
-  //rpc.HandleHTTP() // indicate that RPC server receives HTTP requests
 
   var err error
   server.listener, err = net.Listen("tcp", ":"+strconv.Itoa(server.Port)) // return net listener on port 8080

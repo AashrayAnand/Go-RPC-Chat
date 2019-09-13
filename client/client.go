@@ -8,6 +8,7 @@ import (
   "fmt"
   "bufio"
   "os"
+  "strings"
 )
 
 // given format parameter, returns stringified time
@@ -75,7 +76,7 @@ func (client *Client) SendMessage(message *shared.Msg) {
   }
   // attempted to DM user not currently in chat room
   if resp.Code == -1 {
-    fmt.Printf("the user %s does not exist", message.Receiver)
+    fmt.Printf("the user %s does not exist\n", message.Receiver)
   }
 }
 
@@ -104,6 +105,10 @@ func (client *Client) register() {
     fmt.Print("Enter a screen name: ")
     name, _ := reader.ReadString('\n')
     nameNoLine := name[:len(name) - 1]
+    if strings.IndexByte(nameNoLine, ' ') != -1 {
+      fmt.Println("cannot have white space in user name")
+      continue
+    }
     fmt.Printf("attempting to register user: %s", name)
     args := &shared.NewUserArgs{Name: nameNoLine}
     resp := &shared.NewUserResp{}
@@ -146,9 +151,41 @@ func (client *Client) listen(DoneChan chan int) {
       DoneChan <- 1
       break
     default:
-      // send basic message to group
-      MessageStruct :=  &shared.Msg{Sender: client.Name, Receiver: "", Message: messageNoLine, Time: t_(k_)}
-      client.SendMessage(MessageStruct)
+      // direct message
+      if messageNoLine[0] == '@' {
+        directMessage := messageNoLine[1:]
+        // receiver and message should be split by white space
+        // get the position of the split
+        endOfReceiver := strings.IndexByte(directMessage, ' ')
+        if endOfReceiver == -1 || endOfReceiver == len(directMessage) - 1 {
+          fmt.Println("please enter non-empty message")
+          continue
+        }
+        // get receiver (characters before whitespace)
+        receiver := directMessage[:endOfReceiver]
+        // get message (characters after whitespace)
+        message := directMessage[endOfReceiver + 1:]
+        // function to check if message is just white space
+        checkIsWhitespace := func(s string) bool {
+          for i := 0; i < len(s); i++ {
+            if s[i] != ' ' {
+              return false
+            }
+          }
+          return true
+        }
+        // send message, if not just white space
+        if !checkIsWhitespace(message) {
+          MessageStruct := &shared.Msg{Sender: client.Name, Receiver : receiver, Message: message, Time: t_(k_)}
+          client.SendMessage(MessageStruct)
+        } else {
+          fmt.Println("message must contain non-whitespace characters")
+        }
+      } else {
+        // send basic message to group
+        MessageStruct :=  &shared.Msg{Sender: client.Name, Receiver: "", Message: messageNoLine, Time: t_(k_)}
+        client.SendMessage(MessageStruct)
+      }
     }
   }
 }

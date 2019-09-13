@@ -18,6 +18,22 @@ func main() {
 	flag.StringVar(&proc, "proc", "", "") // defines -proc flag, default value of server
 	flag.Parse() // parse command line arguments
 
+	// create channel that blocks on an interrupt signal, will ensure
+	// client is terminated appropriately if the user does not exit
+	// with the exit command
+	// overrides default signal behavior, redirects
+	// interrupt signals to registered channel interruptChan
+	/*signal.Notify(interruptChan, os.Interrupt)
+	// dispatch goroutine, which blocks until we receive an OS
+	// interrupt
+	go func() {
+		// block until interrupt signal sent to channel
+		<-interruptChan
+		fmt.Println("Received interrupt, goodbye")
+		close(doneChan)
+	}()*/
+
+
 	if(proc != "server" && proc != "client"){
 		log.Fatal("error, -proc argument must be server or client")
 	} else {
