@@ -9,6 +9,7 @@ import (
   "bufio"
   "os"
   "strings"
+  "sync"
 )
 
 // given format parameter, returns stringified time
@@ -27,7 +28,8 @@ const (
   EXIT = "/exit" // message user must send to exit chat
   HELP = "/help" // help function, user can send this to list chat commands
   WHITESPACE = ""
-  local = "127.0.0.1:8080" // local host connection string
+  host = "18.219.140.44:" // local host connection string
+  port = "3000"
 )
 
 func (client *Client) Terminate() {
@@ -39,7 +41,7 @@ func (client *Client) Terminate() {
 func (client *Client) Create() {
   if client.Conn == nil {
     var err error
-    client.Conn, err = rpc.Dial("tcp", local) // register RPC client
+    client.Conn, err = rpc.Dial("tcp", host + port) // register RPC client
     if err != nil {
       log.Fatal("client error on Dial")
     }
@@ -84,22 +86,25 @@ func (client *Client) SendMessage(message *shared.Msg) {
 
 // main loop for client, dispatch goroutines to check for and handle messages
 func (client *Client) Handle() {
-  client.register() // register user in chat room
+  var wg sync.WaitGroup
+  wg.Add(1)
+  go client.register(&wg) // register user in chat room
+  wg.Wait()
 
-  go client.GetMessages()
+  client.GetMessages()
   // use channel to block Handle() after dispatching go routines to get
   // messages and listen to user input (value will be sent to DoneChan
   // when client.listen terminates)
-  DoneChan := make(chan int)
+  /*DoneChan := make(chan int)
   go client.listen(DoneChan)
-  <- DoneChan
+  <- DoneChan*/
 
   // at this point, client should be terminated
   client.Terminate()
 }
 
 // asks for screen name continuously, until error, or name is registered (unique name)
-func (client *Client) register() {
+func (client *Client) register(wg *sync.WaitGroup) {
   reader := bufio.NewReader(os.Stdin) // read from stdin
   for {
     fmt.Print("Enter a screen name: ")
@@ -129,6 +134,7 @@ func (client *Client) register() {
       break
     }
   }
+  wg.Done()
 }
 
 func (client *Client) listen(DoneChan chan int) {

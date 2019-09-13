@@ -66,6 +66,9 @@ func (server *Server) GetMessages(request *shared.GetMessagesArgs, response *sha
   // lock message list until we have copied messages
   server.Messages.Lock()
   defer server.Messages.Unlock()
+  for k, _ := server.Messages.Map {
+    fmt.Println(k)
+  }
   if messages, ok := server.Messages.Map[request.User]; ok {
     response.Messages = messages
   } else {
@@ -108,7 +111,7 @@ func (server *Server) Terminate() {
 }
 
 func (server *Server) initialize() {
-  server.Port = 3000
+  server.Port = 3000 // available port on EC2
   server.Users = make([]string, 1, MAX_USERS) // initialize to hold up to max users
   server.Messages.Map = make(map[string][]*shared.Msg, 1) // will be resized with append
 }
